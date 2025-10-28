@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Punch In App</title>
+  <style>
+    :root {
+      --primary: #007bff;
+      --bg-light: #f5f5f5;
+      --bg-dark: #1e1e1e;
+      --card-light: #ffffff;
+      --card-dark: #2b2b2b;
+      --text-light: #333;
+      --text-dark: #f1f1f1;
+      --success: #28a745;
+      --error: #dc3545;
+      --shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    [data-theme="dark"] {
+      --bg-light: var(--bg-dark);
+      --card-light: var(--card-dark);
+      --text-light: var(--text-dark);
+      --shadow: 0 2px 10px rgba(255,255,255,0.05);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      transition: background-color 0.3s, color 0.3s;
+    }
+
+    body {
+      font-family: "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-light);
+      color: var(--text-light);
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      background: var(--card-light);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+      padding: 40px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 25px;
+    }
+
+    .header h1 {
+      font-size: 32px;
+      margin-bottom: 10px;
+    }
+
+    .theme-toggle {
+      position: absolute;
+      top: 20px;
+      right: 30px;
+      cursor: pointer;
+      font-size: 22px;
+    }
+
+    .local-time {
+      font-size: 16px;
+      margin-bottom: 20px;
+    }
+
+    .punch-section {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .time-input {
+      padding: 10px 15px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      width: 260px;
+      font-size: 14px;
+    }
+
+    .punch-btn {
+      padding: 10px 30px;
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: 0.2s;
+    }
+
+    .punch-btn:hover {
+      background-color: #0056b3;
+    }
+
+    .quote {
+      text-align: center;
+      font-style: italic;
+      margin: 25px 0;
+      color: var(--text-light);
+    }
+
+    .recent-punches h2 {
+      text-align: center;
+      margin-bottom: 15px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    thead {
+      background-color: var(--primary);
+      color: white;
+    }
+
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+
+    tr:hover {
+      background-color: rgba(0, 123, 255, 0.05);
+    }
+
+    .loading, .error, .success {
+      text-align: center;
+      padding: 15px;
+      border-radius: 6px;
+      margin: 10px 0;
+    }
+
+    .error {
+      background-color: #fee;
+      color: var(--error);
+    }
+
+    .success {
+      background-color: #e9f9ee;
+      color: var(--success);
+    }
+
+    .summary {
+      text-align: center;
+      margin-top: 15px;
+      font-weight: 600;
+    }
+
+    @media (max-width: 768px) {
+      .punch-section {
+        flex-direction: column;
+        align-items: center;
+      }
+      .time-input {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="theme-toggle" id="themeToggle">🌙</div>
+
+  <div class="container">
+    <div class="header">
+      <h1>Punch In App</h1>
+      <div class="local-time"><strong>Local Time:</strong> <span id="currentTime">Loading...</span></div>
+    </div>
+
+    <div class="punch-section">
+      <input type="text" id="manualTime" class="time-input" placeholder="Enter time manually (optional)">
+      <button id="punchInBtn" class="punch-btn">Punch In</button>
+      <button id="punchOutBtn" class="punch-btn" style="background:#28a745;">Punch Out</button>
+    </div>
+
+    <div id="message"></div>
+
+    <div class="quote">
+      <span id="greetingText">Good Afternoon 🌞</span> — “Small steps every day lead to big results.”
+    </div>
+
+    <div class="recent-punches">
+      <h2>Recent Punches</h2>
+      <div id="tableContainer" class="loading">Loading recent punches...</div>
+    </div>
+
+    <div class="summary" id="summaryText"></div>
+  </div>
+
+  <script>
+    const API_BASE_URL = "https://punch-backend-1.onrender.com";
+    const API_CONFIG = {
+      punchInEndpoint: `${API_BASE_URL}/api/punchin`,
+      punchOutEndpoint: `${API_BASE_URL}/api/punchout`,
+      getPunchesEndpoint: `${API_BASE_URL}/api/punches`
+    };
+
+    // 🕒 Update time and greeting
+    function updateCurrentTime() {
+      const now = new Date();
+      document.getElementById('currentTime').textContent = now.toLocaleString('en-GB', {
+        hour12: false,
+      });
+      const hour = now.getHours();
+      const greeting = hour < 12 ? "Good Morning ☀️" : hour < 17 ? "Good Afternoon 🌞" : "Good Evening 🌙";
+      document.getElementById('greetingText').textContent = greeting;
+    }
+    updateCurrentTime();
+    setInterval(updateCurrentTime, 1000);
+
+    // 🌗 Theme toggle
+    const themeToggle = document.getElementById('themeToggle');
+    themeToggle.addEventListener('click', () => {
+      const currentTheme = document.body.getAttribute('data-theme');
+      if (currentTheme === 'dark') {
+        document.body.removeAttribute('data-theme');
+        themeToggle.textContent = '🌙';
+      } else {
+        document.body.setAttribute('data-theme', 'dark');
+        themeToggle.textContent = '☀️';
+      }
+    });
+
+    // ✅ Message display
+    function showMessage(message, type = 'success') {
+      const messageDiv = document.getElementById('message');
+      messageDiv.className = type;
+      messageDiv.textContent = message;
+      setTimeout(() => {
+        messageDiv.textContent = '';
+        messageDiv.className = '';
+      }, 4000);
+    }
+
+    // 🕔 Punch In / Out API
+    async function punch(type) {
+      const endpoint = type === 'in' ? API_CONFIG.punchInEndpoint : API_CONFIG.punchOutEndpoint;
+      const btn = document.getElementById(type === 'in' ? 'punchInBtn' : 'punchOutBtn');
+      btn.disabled = true;
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ time: new Date().toISOString() })
+        });
+        if (!response.ok) throw new Error(`Failed to punch ${type}`);
+        showMessage(`✅ Punch ${type === 'in' ? 'In' : 'Out'} recorded successfully!`, 'success');
+        await loadRecentPunches();
+      } catch (error) {
+        showMessage(error.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // 📄 Load Punches
+    async function loadRecentPunches() {
+      const tableContainer = document.getElementById('tableContainer');
+      try {
+        const res = await fetch(API_CONFIG.getPunchesEndpoint);
+        if (!res.ok) throw new Error('Failed to load punches');
+        const data = await res.json();
+        const punches = data.punches || data;
+
+        if (!punches.length) {
+          tableContainer.innerHTML = '<div class="loading">No punches recorded yet.</div>';
+          return;
+        }
+
+        let tableHTML = `
+          <table>
+            <thead><tr><th>#</th><th>Type</th><th>Time</th></tr></thead>
+            <tbody>
+        `;
+
+        punches.forEach((p, i) => {
+          tableHTML += `<tr><td>${i + 1}</td><td>${p.type || 'In'}</td><td>${formatDateTime(p.time)}</td></tr>`;
+        });
+        tableHTML += '</tbody></table>';
+        tableContainer.innerHTML = tableHTML;
+
+        calculateTotalHours(punches);
+
+      } catch (e) {
+        tableContainer.innerHTML = `<div class="error">${e.message}</div>`;
+      }
+    }
+
+    function formatDateTime(dateString) {
+      const d = new Date(dateString);
+      return d.toLocaleString('en-GB', { hour12: false });
+    }
+
+    // ⏱️ Calculate total hours
+    function calculateTotalHours(punches) {
+      let total = 0;
+      for (let i = 0; i < punches.length; i += 2) {
+        const inTime = new Date(punches[i]?.time);
+        const outTime = new Date(punches[i + 1]?.time);
+        if (inTime && outTime && !isNaN(inTime) && !isNaN(outTime)) {
+          total += (outTime - inTime) / (1000 * 60 * 60);
+        }
+      }
+      document.getElementById('summaryText').textContent = total
+        ? `Total working hours today: ${total.toFixed(2)} hrs`
+        : '';
+    }
+
+    document.getElementById('punchInBtn').addEventListener('click', () => punch('in'));
+    document.getElementById('punchOutBtn').addEventListener('click', () => punch('out'));
+
+    loadRecentPunches();
+    setInterval(loadRecentPunches, 30000);
+  </script>
+</body>
+</html>
